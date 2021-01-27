@@ -21,6 +21,7 @@ class SchNetInteraction(nn.Module):
         cutoff_network (nn.Module, optional): cutoff layer.
         normalize_filter (bool, optional): if True, divide aggregated filter by number
             of neighbors over which convolution is applied.
+        activation (callable, optional): activation function, shifted_softplus by default.
 
     """
 
@@ -32,11 +33,12 @@ class SchNetInteraction(nn.Module):
         cutoff,
         cutoff_network=HardCutoff,
         normalize_filter=False,
+        activation=shifted_softplus
     ):
         super(SchNetInteraction, self).__init__()
         # filter block used in interaction block
         self.filter_network = nn.Sequential(
-            Dense(n_spatial_basis, n_filters, activation=shifted_softplus),
+            Dense(n_spatial_basis, n_filters, activation=activation),
             Dense(n_filters, n_filters),
         )
         # cutoff layer used in interaction block
@@ -48,7 +50,7 @@ class SchNetInteraction(nn.Module):
             n_atom_basis,
             self.filter_network,
             cutoff_network=self.cutoff_network,
-            activation=shifted_softplus,
+            activation=activation,
             normalize_filter=normalize_filter,
         )
         # dense layer
@@ -102,6 +104,7 @@ class SchNet(nn.Module):
         distance_expansion (nn.Module, optional): layer for expanding interatomic
             distances in a basis.
         charged_systems (bool, optional):
+        activation (callable, optional): activation function, shifted_softplus by default.
 
     References:
     .. [#schnet1] Schütt, Arbabzadah, Chmiela, Müller, Tkatchenko:
@@ -132,6 +135,7 @@ class SchNet(nn.Module):
         trainable_gaussians=False,
         distance_expansion=None,
         charged_systems=False,
+        activation=shifted_softplus
     ):
         super(SchNet, self).__init__()
 
@@ -163,6 +167,7 @@ class SchNet(nn.Module):
                         cutoff_network=cutoff_network,
                         cutoff=cutoff,
                         normalize_filter=normalize_filter,
+                        activation=activation
                     )
                 ]
                 * n_interactions
@@ -178,6 +183,7 @@ class SchNet(nn.Module):
                         cutoff_network=cutoff_network,
                         cutoff=cutoff,
                         normalize_filter=normalize_filter,
+                        activation=activation
                     )
                     for _ in range(n_interactions)
                 ]
