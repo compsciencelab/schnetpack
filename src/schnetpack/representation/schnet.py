@@ -149,7 +149,8 @@ class SchNet(nn.Module):
 
         if distance_embeddings:
             self.neighbor_embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
-            self.distance_projection = nn.Linear(n_gaussians, n_atom_basis, bias=False)
+            self.distance_projection = nn.Linear(n_gaussians, n_atom_basis)
+            self.neighbor_cutoff = cutoff_network(cutoff)
             self.combine_embeddings = nn.Linear(n_atom_basis * 2, n_atom_basis)
 
         # layer for computing interatomic distances
@@ -249,7 +250,7 @@ class SchNet(nn.Module):
             neighbor_embeddings = self.neighbor_embedding(neighbor_atomic_numbers)
 
             # combine distance embeddings with atom embeddings
-            kernel = self.distance_projection(f_ij.reshape(batch_size, seq_len, seq_len - 1, -1))
+            kernel = self.distance_projection(f_ij) * self.neighbor_cutoff(r_ij).unsqueeze(-1)
             x = torch.cat([x, (neighbor_embeddings * kernel).sum(dim=-2)], dim=-1)
             x = self.combine_embeddings(x)
 
