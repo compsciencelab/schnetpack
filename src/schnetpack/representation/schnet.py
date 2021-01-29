@@ -105,6 +105,7 @@ class SchNet(nn.Module):
             distances in a basis.
         charged_systems (bool, optional):
         activation (callable, optional): activation function, shifted_softplus by default.
+        distance_embeddings (bool, optional): if True, encode distances in atomic embeddings.
 
     References:
     .. [#schnet1] Schütt, Arbabzadah, Chmiela, Müller, Tkatchenko:
@@ -135,14 +136,21 @@ class SchNet(nn.Module):
         trainable_gaussians=False,
         distance_expansion=None,
         charged_systems=False,
-        activation=shifted_softplus
+        activation=shifted_softplus,
+        distance_embeddings=False
     ):
         super(SchNet, self).__init__()
 
         self.n_atom_basis = n_atom_basis
+        self.distance_embeddings = distance_embeddings
         # make a lookup table to store embeddings for each element (up to atomic
         # number max_z) each of which is a vector of size n_atom_basis
         self.embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
+
+        if distance_embeddings:
+            self.neighbor_embedding = nn.Embedding(max_z, n_atom_basis, padding_idx=0)
+            self.distance_projection = nn.Linear(n_gaussians, n_atom_basis, bias=False)
+            self.combine_embeddings = nn.Linear(n_atom_basis * 2, n_atom_basis)
 
         # layer for computing interatomic distances
         self.distances = AtomDistances()
@@ -232,6 +240,19 @@ class SchNet(nn.Module):
         )
         # expand interatomic distances (for example, Gaussian smearing)
         f_ij = self.distance_expansion(r_ij)
+
+        if self.distance_embeddings:
+            # embed neighbouring atoms
+            batch_size, seq_len, _ = positions.size()
+            neighbor_atomic_numbers = atomic_numbers.unsqueeze(-1).expand(-1, -1, seq_len - 1)
+            neighbor_atomic_numbers = neighbor_atomic_numbers.gather(1, neighbors) * neighbor_mask.int()
+            neighbor_embeddings = self.neighbor_embedding(neighbor_atomic_numbers)
+
+            # combine distance embeddings with atom embeddings
+            kernel = self.distance_projection(f_ij.reshape(batch_size, seq_len, seq_len - 1, -1))
+            x = torch.cat([x, (neighbor_embeddings * kernel).sum(dim=-2)], dim=-1)
+            x = self.combine_embeddings(x)
+
         # store intermediate representations
         if self.return_intermediate:
             xs = [x]
